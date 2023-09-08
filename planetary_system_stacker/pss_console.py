@@ -11,6 +11,7 @@ from miscellaneous import Miscellaneous
 from workflow import Workflow
 
 # Definition of data types, including value bounds, used in command line argument parsing.
+    
 def ram_size_type(x):
     try:
         x = int(x)
@@ -124,7 +125,9 @@ class PssConsole(QtCore.QObject):
     signal_compute_frame_qualities = QtCore.pyqtSignal()
     signal_stack_frames = QtCore.pyqtSignal()
     signal_save_stacked_image = QtCore.pyqtSignal()
-
+    signal_postprocess_image = QtCore.pyqtSignal()
+    signal_save_postprocessed_image = QtCore.pyqtSignal(object)
+    
     def __init__(self, parent=None):
         super(PssConsole, self).__init__(parent)
 
@@ -143,7 +146,7 @@ class PssConsole(QtCore.QObject):
         """
         parser = ArgumentParser()
         parser.add_argument("job_input", nargs='+', help="input video files or still image folders")
-
+        parser.add_argument("--post", action="store_true", help="run in auto mode with postprocessing")
         parser.add_argument("-p", "--protocol", action="store_true",
                             help="Store protocol with results")
         parser.add_argument("--protocol_detail", type=int, choices=[0, 1, 2], default=1,
@@ -209,16 +212,20 @@ class PssConsole(QtCore.QObject):
 
         arguments = parser.parse_args()
         # self.print_arguments(arguments)
-
-        # Create and initialize the configuration object. The configuration stored in the .ini file
-        # in the user's home directory is ignored in this case. Modifications to standard values
-        # come as command line arguments.
+        # Create configuration object. If --post initialize with required .ini file.
+        # If not --post initialize configuration with standard values.
+        # Modification to standard stacking values come as command line arguments
         self.configuration = Configuration()
-        self.configuration.initialize_configuration(read_from_file=False)
-
-        # In the standard configuration postprocessing is included in the workflow. This does not
-        # make sense in command line mode.
-        self.configuration.global_parameters_include_postprocessing = False
+        if arguments.post:
+            self.configuration.initialize_configuration()
+            if not self.configuration.configuration_read:
+                print('ERROR: .ini file not found with --post option')
+                self.stop_execution()
+        else:
+            self.configuration.initialize_configuration(read_from_file=False)
+            print(2)
+        
+        self.configuration.global_parameters_include_postprocessing = arguments.post
 
         # Modify the standard configuration as specified in the command line arguments.
         self.configuration.global_parameters_store_protocol_with_result = arguments.protocol
@@ -298,6 +305,8 @@ class PssConsole(QtCore.QObject):
             self.workflow.execute_compute_frame_qualities)
         self.signal_stack_frames.connect(self.workflow.execute_stack_frames)
         self.signal_save_stacked_image.connect(self.workflow.execute_save_stacked_image)
+        self.signal_postprocess_image.connect(self.workflow.execute_postprocess_image)
+        self.signal_save_postprocessed_image.connect(self.workflow.execute_save_postprocessed_image)
 
         # Set "automatic" to True. There is no interactive mode in this case.
         self.automatic = True
@@ -449,6 +458,12 @@ class PssConsole(QtCore.QObject):
 
         elif self.activity == "Save stacked image":
             self.signal_save_stacked_image.emit()
+        # Add Postprocessing to activity if --post    
+        elif self.activity == "Postprocessing":
+            self.signal_postprocess_image.emit()
+         # Add Save postprocessed image activity if --post   
+        elif self.activity == "Save postprocessed image":
+            self.signal_save_postprocessed_image.emit(self.workflow.postprocessed_image)
 
         elif self.activity == "Next job":
             self.job_index += 1
