@@ -1,3 +1,18 @@
+"""
+This version of pss_console.py has been edited to allow for postprocessing from the command line.
+The program runs as originally designed unless the additional --post argument is added to the call.
+--post requires a config.pss file to be provided, so that the default settings are not used for 
+    post processing
+The end result is automated postprocessing and save_postprocessed_image with previously saved
+    configurations settings when '--post config.pss' is added as an argument
+    
+Additions/changes to the original code are indicated by comments throughout
+    
+Chris Mandrell, Southern Illinois University-Carbondale
+School of Physics and Applied Physics
+8/23/2023
+"""
+
 from argparse import ArgumentParser, ArgumentTypeError
 from time import sleep
 from glob import glob
@@ -125,6 +140,7 @@ class PssConsole(QtCore.QObject):
     signal_compute_frame_qualities = QtCore.pyqtSignal()
     signal_stack_frames = QtCore.pyqtSignal()
     signal_save_stacked_image = QtCore.pyqtSignal()
+    # Next two were added for --post
     signal_postprocess_image = QtCore.pyqtSignal()
     signal_save_postprocessed_image = QtCore.pyqtSignal(object)
     
@@ -146,7 +162,8 @@ class PssConsole(QtCore.QObject):
         """
         parser = ArgumentParser()
         parser.add_argument("job_input", nargs='+', help="input video files or still image folders")
-        parser.add_argument("--post", action="store_true", help="run in auto mode with postprocessing")
+        # Add --post to argument
+        parser.add_argument("--post", action="store",help="run in auto mode with postprocessing only if required configuration file exists", required=True)
         parser.add_argument("-p", "--protocol", action="store_true",
                             help="Store protocol with results")
         parser.add_argument("--protocol_detail", type=int, choices=[0, 1, 2], default=1,
@@ -212,20 +229,34 @@ class PssConsole(QtCore.QObject):
 
         arguments = parser.parse_args()
         # self.print_arguments(arguments)
-        # Create configuration object. If --post initialize with required .ini file.
+        """OLD COMMENT
+        # Create and initialize the configuration object. The configuration stored in the .ini file
+        # in the user's home directory is ignored in this case. Modifications to standard values
+        # come as command line arguments.
+        """
+        """NEW COMMENT
+        # if --post read config.pss as passed, otherwise exit execution.
         # If not --post initialize configuration with standard values.
         # Modification to standard stacking values come as command line arguments
+        """
         self.configuration = Configuration()
         if arguments.post:
-            self.configuration.initialize_configuration()
-            if not self.configuration.configuration_read:
-                print('ERROR: .ini file not found with --post option')
-                self.stop_execution()
+            self.configuration.read_config(arguments.post)
+           
         else:
             self.configuration.initialize_configuration(read_from_file=False)
             print(2)
-        
-        self.configuration.global_parameters_include_postprocessing = arguments.post
+        """OLD COMMENT
+        # In the standard configuration postprocessing is included in the workflow. This does not
+        # make sense in command line mode.
+        """
+        """NEW COMMENT
+        # Postprocessing now included if --post
+        """
+        if arguments.post:
+            self.configuration.global_parameters_include_postprocessing = True
+        else:
+            self.configuration.global_parameters_include_postprocessing = False
 
         # Modify the standard configuration as specified in the command line arguments.
         self.configuration.global_parameters_store_protocol_with_result = arguments.protocol
@@ -305,6 +336,7 @@ class PssConsole(QtCore.QObject):
             self.workflow.execute_compute_frame_qualities)
         self.signal_stack_frames.connect(self.workflow.execute_stack_frames)
         self.signal_save_stacked_image.connect(self.workflow.execute_save_stacked_image)
+        # Signals added for --post
         self.signal_postprocess_image.connect(self.workflow.execute_postprocess_image)
         self.signal_save_postprocessed_image.connect(self.workflow.execute_save_postprocessed_image)
 
@@ -458,10 +490,12 @@ class PssConsole(QtCore.QObject):
 
         elif self.activity == "Save stacked image":
             self.signal_save_stacked_image.emit()
+            
         # Add Postprocessing to activity if --post    
         elif self.activity == "Postprocessing":
             self.signal_postprocess_image.emit()
-         # Add Save postprocessed image activity if --post   
+            
+        # Add Save postprocessed image activity if --post   
         elif self.activity == "Save postprocessed image":
             self.signal_save_postprocessed_image.emit(self.workflow.postprocessed_image)
 
