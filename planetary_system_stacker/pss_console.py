@@ -162,8 +162,8 @@ class PssConsole(QtCore.QObject):
         """
         parser = ArgumentParser()
         parser.add_argument("job_input", nargs='+', help="input video files or still image folders")
-        # Add --post to argument
-        parser.add_argument("--post", action="store",help="run in auto mode with postprocessing only if required configuration file exists", required=True)
+        parser.add_argument("--post", action="store", required=True,
+                            help="auto mode with postprocessing using provided configuration")
         parser.add_argument("-p", "--protocol", action="store_true",
                             help="Store protocol with results")
         parser.add_argument("--protocol_detail", type=int, choices=[0, 1, 2], default=1,
